@@ -15,11 +15,18 @@ namespace ObsidianX.Web.EventSource
     /// </summary>
     public class EventSource
     {
+        public const int ERROR_CONNECTION_FAILURE = -1000;
+
+        public const int ERROR_EVENT_INVALID_PREFIX = -2000;
+        public const int ERROR_EVENT_INVALID_ID = -2001;
+        public const int ERROR_EVENT_INVALID_RETRY = -2002;
+        public const int ERROR_EVENT_INVALID_FIELD = -2003;
+
         public delegate void OpenDelegate ();
 
         public delegate void StateChangedDelegate (ReadyState state);
 
-        public delegate void ErrorDelegate (string reason, string data);
+        public delegate void ErrorDelegate (string reason, string data, int code);
 
         public delegate void EventDelegate (Event evt);
 
@@ -141,6 +148,7 @@ namespace ObsidianX.Web.EventSource
                         if (request.Headers.Contains ("Last-Event-ID")) {
                             request.Headers.Remove ("Last-Event-ID");
                         }
+
                         request.Headers.Add ("Last-Event-ID", _lastId.ToString ());
                     }
 
@@ -154,9 +162,11 @@ namespace ObsidianX.Web.EventSource
                                         continue;
                                     }
                                 }
-                                OnError?.Invoke ("Error connecting to server", $"Response code: {(int) response.StatusCode} {response.StatusCode}");
+
+                                OnError?.Invoke ("Error connecting to server", $"Response code: {(int) response.StatusCode} {response.StatusCode}", (int) response.StatusCode);
                                 break;
                             }
+
                             using (Stream body = await response.Content.ReadAsStreamAsync ()) {
                                 using (var reader = new StreamReader (body)) {
                                     ReadyState = ReadyState.Open;
@@ -172,7 +182,7 @@ namespace ObsidianX.Web.EventSource
                                             }
                                         }
                                     } catch (IOException e) {
-                                        OnError?.Invoke ("Connection failure", e.Message);
+                                        OnError?.Invoke ("Connection failure", e.Message, ERROR_CONNECTION_FAILURE);
                                     }
                                 }
                             }
@@ -212,7 +222,7 @@ namespace ObsidianX.Web.EventSource
             foreach (string line in lines) {
                 string[] tokens = line.Split (new[] {':'}, 2);
                 if (tokens.Length < 2) {
-                    OnError?.Invoke ("Invalid event: line has no field prefix", msg);
+                    OnError?.Invoke ("Invalid event: line has no field prefix", msg, ERROR_EVENT_INVALID_PREFIX);
                     return;
                 }
 
@@ -221,25 +231,27 @@ namespace ObsidianX.Web.EventSource
                 switch (tokens[0]) {
                     case "id":
                         if (!long.TryParse (body, out evt.id)) {
-                            OnError?.Invoke ("Invalid event: ID field is not an integer", msg);
+                            OnError?.Invoke ("Invalid event: ID field is not an integer", msg, ERROR_EVENT_INVALID_ID);
                             return;
                         } else {
                             _lastId = evt.id;
                         }
+
                         break;
                     case "event":
                         evt.name = body;
                         break;
                     case "retry":
                         if (!int.TryParse (body, out _reconnectTimer)) {
-                            OnError?.Invoke ("Invalid retry value in event", line);
+                            OnError?.Invoke ("Invalid retry value in event", line, ERROR_EVENT_INVALID_RETRY);
                         }
+
                         break;
                     case "data":
                         evt.data += body;
                         break;
                     default:
-                        OnError?.Invoke ("Invalid field in event: ", line);
+                        OnError?.Invoke ("Invalid field in event: ", line, ERROR_EVENT_INVALID_FIELD);
                         break;
                 }
             }

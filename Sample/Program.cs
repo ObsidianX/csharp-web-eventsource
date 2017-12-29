@@ -35,9 +35,9 @@ namespace Sample
             Console.WriteLine ($"State changed: {state}");
         }
 
-        public static void OnError (string reason, string data)
+        public static void OnError (string reason, string data, int code)
         {
-            Console.WriteLine ($"Error: {reason}");
+            Console.WriteLine ($"Error: ({code}): {reason}");
             Console.WriteLine (data);
         }
 
